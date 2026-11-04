@@ -10,16 +10,17 @@ import socket
 import subprocess
 import threading
 import time
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
-from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parent
 LOG_DIR = Path(os.environ.get("WIFI_MONITOR_LOG_DIR", ROOT / "logs"))
 PAGE = ROOT / "dashboard.html"
-IST = ZoneInfo("Asia/Kolkata")
+# India has no daylight-saving changes, so use the fixed IST offset. This also
+# avoids requiring an OS timezone database on minimal environments like Termux.
+IST = timezone(timedelta(hours=5, minutes=30), name="IST")
 LAST_PRUNE = 0.0
 IS_TERMUX = "TERMUX_VERSION" in os.environ or os.environ.get("PREFIX", "").endswith("/com.termux/files/usr")
 
