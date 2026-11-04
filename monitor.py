@@ -21,6 +21,7 @@ LOG_DIR = Path(os.environ.get("WIFI_MONITOR_LOG_DIR", ROOT / "logs"))
 PAGE = ROOT / "dashboard.html"
 IST = ZoneInfo("Asia/Kolkata")
 LAST_PRUNE = 0.0
+IS_TERMUX = "TERMUX_VERSION" in os.environ or os.environ.get("PREFIX", "").endswith("/com.termux/files/usr")
 
 
 def now() -> float:
@@ -97,9 +98,35 @@ def ping(host: str) -> bool:
         return False
 
 
+def termux_wifi_connected() -> bool | None:
+    """Return Wi-Fi association state via optional Termux:API, or None if unavailable."""
+    if not IS_TERMUX:
+        return None
+    try:
+        result = subprocess.run(
+            ["termux-wifi-connectioninfo"],
+            capture_output=True,
+            text=True,
+            timeout=1.5,
+            check=False,
+        )
+        if result.returncode != 0:
+            return None
+        info = json.loads(result.stdout)
+        state = info.get("supplicant_state")
+        if isinstance(state, str):
+            return state.upper() == "COMPLETED"
+    except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError):
+        pass
+    return None
+
+
 def check_connectivity() -> tuple[bool, bool, float | None, str | None]:
     gateway = default_gateway()
-    wifi = ping(gateway) if gateway else False
+    wifi_state = termux_wifi_connected()
+    # Termux:API reports actual Wi-Fi association and also works on Android
+    # versions where Android restricts access to the route table or ICMP.
+    wifi = wifi_state if wifi_state is not None else (ping(gateway) if gateway else False)
     start = time.monotonic()
     internet = False
     try:
