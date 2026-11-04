@@ -235,7 +235,7 @@ def main() -> None:
     parser.add_argument("--host", default="127.0.0.1", help="dashboard bind address; keep localhost for private use")
     parser.add_argument("--port", type=int, default=8765)
     args = parser.parse_args()
-    if args.interval < 2:
+    if args.interval < 1:
         parser.error("--interval must be at least 2 seconds")
     INTERVAL = args.interval
     threading.Thread(target=monitor_loop, args=(args.interval,), daemon=True).start()
