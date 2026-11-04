@@ -222,7 +222,12 @@ def dashboard_data() -> dict:
     outages = []
     active = None
     for sample in samples:
-        kind = "wifi" if sample["wifi"] is False else ("internet" if not sample["internet"] else None)
+        kind = (
+            "wifi" if sample["wifi"] is False
+            else "internet" if not sample["internet"]
+            else "dns" if sample["dns"] is False
+            else None
+        )
         if kind and active is None:
             active = {"id": len(outages) + 1, "kind": kind, "started_at": sample["checked_at"], "ended_at": None}
         elif kind and active and active["kind"] != kind:
