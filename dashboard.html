@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Wi-Fi uptime</title>
+  <style>
+    :root { color-scheme: dark; --bg:#0b1020; --panel:#141c30; --line:#28334b; --muted:#9ba9c2; --text:#eef3ff; --green:#49d89b; --red:#ff6f7d; --amber:#ffc66d; }
+    * { box-sizing:border-box } body { margin:0; font:15px/1.5 system-ui,sans-serif; background:radial-gradient(ellipse at 15% 0%,#1b2942 0,transparent 42%),var(--bg); color:var(--text) }
+    main { max-width:1050px; margin:0 auto; padding:38px 22px 60px } header { display:flex; align-items:center; justify-content:space-between; gap:15px; margin-bottom:28px }
+    h1 { margin:0; font-size:clamp(26px,4vw,38px); letter-spacing:-.04em } h2 { font-size:16px; margin:0 0 18px } .sub,.muted { color:var(--muted) }
+    .pill { display:inline-flex; align-items:center; gap:8px; border:1px solid var(--line); background:#10182a; padding:7px 12px; border-radius:99px; color:var(--muted); font-size:13px }
+    .dot { width:9px;height:9px;border-radius:50%;background:var(--amber);box-shadow:0 0 12px currentColor } .up .dot {background:var(--green)} .down .dot {background:var(--red)}
+    .grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; margin-bottom:16px } .card,.panel { background:linear-gradient(145deg,#182239,#11192b); border:1px solid var(--line); border-radius:16px; padding:19px; box-shadow:0 12px 35px #0002 }
+    .metric-label { color:var(--muted); font-size:13px } .metric { font-size:27px; font-weight:650; letter-spacing:-.04em; margin-top:6px } .metric.small {font-size:20px} .panel {margin-top:16px} .panel-head {display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px}
+    #chart { display:block;width:100%;height:84px;border-radius:8px;background:#0c1424 } .legend {font-size:12px;color:var(--muted);display:flex;gap:16px;margin-top:11px}.legend span:before {content:"";display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:var(--green)} .legend .failed:before{background:var(--red)}
+    table {width:100%;border-collapse:collapse;font-size:14px} th,td {padding:12px 9px;text-align:left;border-bottom:1px solid var(--line)} th {color:var(--muted);font-size:12px;font-weight:550} tr:last-child td {border:0}.tag {font-size:12px;border-radius:99px;padding:3px 9px;background:#292538;color:var(--amber)} .tag.wifi {background:#33202b;color:var(--red)}
+    .empty {padding:22px 8px;color:var(--muted);text-align:center} .foot {font-size:12px;color:var(--muted);margin-top:15px} .refresh {font-size:12px;color:var(--muted)}
+    @media(max-width:700px){main{padding:24px 14px}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}header{align-items:flex-start;flex-direction:column}th:nth-child(3),td:nth-child(3){display:none}.card{padding:15px}.metric{font-size:23px}}
+  </style>
+</head>
+<body><main>
+  <header><div><h1>Connection monitor</h1><div class="sub">Local history from this Ubuntu computer</div></div><div id="state" class="pill"><i class="dot"></i><span>Waiting for first check…</span></div></header>
+  <section class="grid">
+    <div class="card"><div class="metric-label">Internet status</div><div id="internet" class="metric">—</div></div>
+    <div class="card"><div class="metric-label">Wi-Fi / local network</div><div id="wifi" class="metric">—</div></div>
+    <div class="card"><div class="metric-label">Uptime, last 24 hours</div><div id="uptime" class="metric">—</div></div>
+    <div class="card"><div class="metric-label">Internet response time</div><div id="latency" class="metric">—</div></div>
+  </section>
+  <section class="panel"><div class="panel-head"><h2>Last 24 hours</h2><span id="checkInfo" class="refresh">Collecting checks…</span></div><canvas id="chart" height="84"></canvas><div class="legend"><span>Online</span><span class="failed">Offline</span></div></section>
+  <section class="panel"><div class="panel-head"><h2>Outages</h2><span class="muted">Most recent 100</span></div><div id="outageBox"></div></section>
+  <div class="foot">Checks run on this computer every few seconds. The dashboard is only available on this computer by default; readable daily logs are stored in the <code>logs/</code> folder.</div>
+</main>
+<script>
+const $=id=>document.getElementById(id);const istOptions={timeZone:'Asia/Kolkata'};
+function duration(seconds){if(seconds<60)return `${seconds}s`;if(seconds<3600)return `${Math.floor(seconds/60)}m ${seconds%60}s`;const h=Math.floor(seconds/3600),m=Math.floor(seconds%3600/60);return `${h}h ${m}m`}
+function draw(samples){const c=$('chart'),dpr=devicePixelRatio||1,w=c.clientWidth,h=84;c.width=w*dpr;c.height=h*dpr;const x=c.getContext('2d');x.scale(dpr,dpr);x.fillStyle='#0c1424';x.fillRect(0,0,w,h);if(!samples.length){x.fillStyle='#9ba9c2';x.font='13px system-ui';x.fillText('Waiting for connectivity samples…',14,46);return}const step=w/samples.length;x.fillStyle='#49d89b';samples.forEach((s,i)=>{x.fillStyle=s.internet?'#49d89b':(s.wifi?'#ffc66d':'#ff6f7d');x.fillRect(i*step,16,Math.max(1,step-.5),44)});}
+function render(data){if(!data.current){draw([]);return}const c=data.current,ok=c.internet;const state=$('state');state.className='pill '+(ok?'up':'down');state.querySelector('span').textContent=ok?'Online':'Offline';$('internet').textContent=ok?'Online':'Offline';$('internet').style.color=ok?'var(--green)':'var(--red)';$('wifi').textContent=c.wifi?'Connected':'Disconnected';$('wifi').style.color=c.wifi?'var(--green)':'var(--red)';$('uptime').textContent=data.uptime_24h==null?'Collecting…':`${data.uptime_24h}%`;$('latency').textContent=c.latency_ms==null?'—':`${c.latency_ms} ms`;$('checkInfo').textContent=`Checked ${new Date(c.checked_at).toLocaleTimeString(undefined,istOptions)} IST · every ${data.interval_seconds}s · ${data.checks_24h} samples`;draw(data.samples);
+const box=$('outageBox');if(!data.outages.length){box.innerHTML='<div class="empty">No outages recorded in the last 24 hours.</div>';return}box.innerHTML=`<table><thead><tr><th>Issue</th><th>Started</th><th>Recovered</th><th>Duration</th></tr></thead><tbody>${data.outages.map(o=>`<tr><td><span class="tag ${o.kind==='wifi'?'wifi':''}">${o.kind==='wifi'?'Wi-Fi / local':'Internet'}</span></td><td>${new Date(o.started_at).toLocaleString(undefined,istOptions)} IST</td><td>${o.ended_at?new Date(o.ended_at).toLocaleString(undefined,istOptions)+' IST':'<span style="color:var(--red)">Ongoing</span>'}</td><td>${duration(o.duration_seconds)}</td></tr>`).join('')}</tbody></table>`}
+async function refresh(){try{const r=await fetch('/api/status',{cache:'no-store'});render(await r.json())}catch(e){$('state').className='pill down';$('state').querySelector('span').textContent='Dashboard disconnected'}}refresh();setInterval(refresh,2000);addEventListener('resize',()=>fetch('/api/status').then(r=>r.json()).then(d=>draw(d.samples)).catch(()=>{}));
+</script></body></html>
