@@ -122,12 +122,29 @@ def termux_wifi_connected() -> bool | None:
     return None
 
 
-def check_connectivity() -> tuple[bool, bool, float | None, str | None]:
+def check_dns() -> bool:
+    """Check whether the system DNS resolver can resolve a public hostname."""
+    try:
+        socket.getaddrinfo("example.com", 443, type=socket.SOCK_STREAM)
+        return True
+    except OSError:
+        return False
+
+
+def check_connectivity() -> tuple[bool | None, bool, bool, float | None, str | None]:
     gateway = default_gateway()
     wifi_state = termux_wifi_connected()
     # Termux:API reports actual Wi-Fi association and also works on Android
     # versions where Android restricts access to the route table or ICMP.
-    wifi = wifi_state if wifi_state is not None else (ping(gateway) if gateway else False)
+    if wifi_state is not None:
+        wifi = wifi_state
+    elif IS_TERMUX and not gateway:
+        # Some Android builds restrict route-table access, and the Play Store
+        # Termux build does not provide the Wi-Fi API add-on.
+        wifi = None
+    else:
+        wifi = ping(gateway) if gateway else False
+    dns = check_dns()
     start = time.monotonic()
     internet = False
     try:
@@ -136,10 +153,10 @@ def check_connectivity() -> tuple[bool, bool, float | None, str | None]:
     except OSError:
         pass
     latency = round((time.monotonic() - start) * 1000, 1) if internet else None
-    return wifi, internet, latency, gateway
+    return wifi, internet, dns, latency, gateway
 
 
-def save_check(wifi: bool, internet: bool, latency: float | None, gateway: str | None) -> None:
+def save_check(wifi: bool | None, internet: bool, dns: bool, latency: float | None, gateway: str | None) -> None:
     global LAST_PRUNE
     checked = now()
     if checked - LAST_PRUNE >= 3600:
@@ -149,8 +166,9 @@ def save_check(wifi: bool, internet: bool, latency: float | None, gateway: str |
     latency_text = f"{latency:.1f} ms" if latency is not None else "none"
     gateway_text = gateway or "none"
     LOG_DIR.mkdir(parents=True, exist_ok=True)
+    wifi_text = "UNKNOWN" if wifi is None else ("UP" if wifi else "DOWN")
     with log_path(datetime.fromtimestamp(checked, IST).date()).open("a", encoding="utf-8") as log:
-        log.write(f"{timestamp} | wifi={'UP' if wifi else 'DOWN'} | internet={'UP' if internet else 'DOWN'} | latency={latency_text} | gateway={gateway_text}\n")
+        log.write(f"{timestamp} | wifi={wifi_text} | dns={'UP' if dns else 'DOWN'} | internet={'UP' if internet else 'DOWN'} | latency={latency_text} | gateway={gateway_text}\n")
 
 
 def monitor_loop(interval: int) -> None:
@@ -183,9 +201,11 @@ def dashboard_data() -> dict:
                         values = dict(item.strip().split("=", 1) for item in fields if "=" in item)
                         latency = values.get("latency", values.get("latency_ms", "none"))
                         latency = latency.removesuffix("ms").removesuffix(" ms")
+                        dns_value = values.get("dns")
                         samples.append({
                             "checked_at": checked,
-                            "wifi": values.get("wifi") == "UP",
+                            "wifi": True if values.get("wifi") == "UP" else (False if values.get("wifi") == "DOWN" else None),
+                            "dns": True if dns_value == "UP" else (False if dns_value == "DOWN" else None),
                             "internet": values.get("internet") == "UP",
                             "latency_ms": float(latency) if latency not in ("none", "") else None,
                             "gateway": values.get("gateway") or None,
@@ -202,7 +222,7 @@ def dashboard_data() -> dict:
     outages = []
     active = None
     for sample in samples:
-        kind = "wifi" if not sample["wifi"] else ("internet" if not sample["internet"] else None)
+        kind = "wifi" if sample["wifi"] is False else ("internet" if not sample["internet"] else None)
         if kind and active is None:
             active = {"id": len(outages) + 1, "kind": kind, "started_at": sample["checked_at"], "ended_at": None}
         elif kind and active and active["kind"] != kind:
@@ -216,11 +236,11 @@ def dashboard_data() -> dict:
     if active:
         outages.append(active)
     return {
-        "current": {"wifi": latest["wifi"], "internet": latest["internet"], "latency_ms": latest["latency_ms"], "gateway": latest["gateway"], "checked_at": stamp(latest["checked_at"])} if latest else None,
+        "current": {"wifi": latest["wifi"], "dns": latest["dns"], "internet": latest["internet"], "latency_ms": latest["latency_ms"], "gateway": latest["gateway"], "checked_at": stamp(latest["checked_at"])} if latest else None,
         "uptime_24h": uptime,
         "checks_24h": total,
         "outages": [{"id": o["id"], "kind": o["kind"], "started_at": stamp(o["started_at"]), "ended_at": stamp(o["ended_at"]), "duration_seconds": max(0, int((o["ended_at"] or current) - o["started_at"]))} for o in outages[-100:][::-1]],
-        "samples": [{"time": stamp(s["checked_at"]), "wifi": s["wifi"], "internet": s["internet"]} for s in samples],
+        "samples": [{"time": stamp(s["checked_at"]), "wifi": s["wifi"], "dns": s["dns"], "internet": s["internet"]} for s in samples],
         "interval_seconds": INTERVAL,
     }
 

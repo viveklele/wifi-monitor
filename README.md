@@ -1,6 +1,6 @@
 # Local Wi-Fi and internet monitor
 
-A small Python 3 program for Ubuntu or Android through Termux. It records timestamped checks in plain text logs and serves a local dashboard. On Ubuntu it checks the default router and public internet. On Termux it can use Termux:API to check whether the phone is associated with Wi-Fi, then checks public internet reachability.
+A small Python 3 program for Ubuntu or Android through Termux. It records timestamped checks in plain text logs and serves a local dashboard. It checks DNS resolution and public internet reachability. On Ubuntu, it can also check whether the default router responds; on Android, Wi-Fi association is optional and depends on Termux:API support.
 
 ## Run
 
@@ -15,7 +15,7 @@ Open <http://127.0.0.1:8765>. Stop it with `Ctrl+C`. The monitor checks every 2 
 python3 monitor.py --interval 10 --port 8765
 ```
 
-The monitor writes readable daily log files under `logs/`, such as `logs/wifi-monitor-2026-11-04.log`. Each line records its timestamp in 24-hour India Standard Time (IST), Wi-Fi/router status, internet status, response time, and gateway. It keeps a rolling 24 hours of entries, removing older log lines about once an hour. The dashboard derives recent outages and sample-based internet uptime from those logs. A brief failure can be missed between checks; lower intervals catch shorter drops but create more log entries.
+The monitor writes readable daily log files under `logs/`, such as `logs/wifi-monitor-2026-11-04.log`. Each line records its timestamp in 24-hour India Standard Time (IST), Wi-Fi/router status when available, DNS status, internet status, response time, and gateway. It keeps a rolling 24 hours of entries, removing older log lines about once an hour. The dashboard derives recent outages and sample-based internet uptime from those logs. A brief failure can be missed between checks; lower intervals catch shorter drops but create more log entries.
 
 ## Start automatically after login (optional)
 
@@ -48,23 +48,22 @@ The server binds to `127.0.0.1` by default, so the dashboard is only available o
 
 ## Android with Termux
 
-1. Install **Termux** and **Termux:API** from the same source (for example, both from F-Droid). Termux and its add-ons need matching signing sources.
+1. Install Termux. No Termux:API add-on is required for DNS and internet monitoring.
 2. In Termux, install the required packages:
 
    ```sh
    pkg update
-   pkg install python git termux-api iproute2
+   pkg install python git iproute2
    ```
 
 3. Copy this project folder into Termux, or clone the repository after it has been pushed to GitHub. Then run:
 
    ```sh
    cd ~/wifi-monitor
-   termux-wifi-connectioninfo
    python monitor.py
    ```
 
-   The Wi-Fi info command should print JSON including `supplicant_state`. If Android asks for permission, grant it. The monitor uses that state to identify Wi-Fi association; it does not need root. `iproute2` is optional for the gateway field.
+   DNS is checked through Android's configured resolver, so the dashboard works with the Google Play Termux build. `iproute2` is optional. Without a supported Wi-Fi API, the log records Wi-Fi as `UNKNOWN`; DNS and internet checks continue normally.
 4. Open <http://127.0.0.1:8765> in the phone's browser.
 
 To keep monitoring with the screen off, run `termux-wake-lock` in another Termux session and set Termux's Android battery use to **Unrestricted**. This can increase battery use, and Android or the phone maker may still stop background work. Stop the monitor with `Ctrl+C`, then release the wake lock with `termux-wake-unlock`.
