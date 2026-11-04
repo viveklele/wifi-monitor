@@ -9,10 +9,10 @@ cd ~/projects/wifi-monitor
 python3 monitor.py
 ```
 
-Open <http://127.0.0.1:8765>. Stop it with `Ctrl+C`. The monitor checks every 2 seconds by default. You can change the interval or port:
+Open <http://127.0.0.1:8765>. Stop it with `Ctrl+C`. The monitor checks every 2 seconds by default. You can set an interval from 1 second upward:
 
 ```bash
-python3 monitor.py --interval 10 --port 8765
+python3 monitor.py --interval 1
 ```
 
 The monitor writes readable daily log files under `logs/`, such as `logs/wifi-monitor-2026-11-04.log`. Each line records its timestamp in 24-hour India Standard Time (IST), Wi-Fi/router status when available, DNS status, internet status, response time, and gateway. It keeps a rolling 24 hours of entries, removing older log lines about once an hour. The dashboard derives recent Wi-Fi, DNS, and internet outages and sample-based internet uptime from those logs. A brief failure can be missed between checks; lower intervals catch shorter drops but create more log entries.
